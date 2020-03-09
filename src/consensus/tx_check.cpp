@@ -4,11 +4,24 @@
 
 #include <consensus/tx_check.h>
 
+#include <arith_uint256.h>
 #include <primitives/transaction.h>
 #include <consensus/validation.h>
 
+//! Quick way to test for genesis tx (which is invalid)
+bool IsGenesisTx(const CTransaction& tx)
+{
+    arith_uint256 txHash = UintToArith256(tx.GetHash());
+    if (txHash == arith_uint256("b3aaaed7565d0594128fffa5f5dee01df8eb24de4245365cb8df7ad0c6e93266"))
+        return true;
+    return false;
+}
+
 bool CheckTransaction(const CTransaction& tx, CValidationState &state, bool fCheckDuplicateInputs)
 {
+    if (IsGenesisTx(tx))
+        return true;
+
     // Basic checks that don't depend on any context
     if (tx.vin.empty())
         return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-txns-vin-empty");

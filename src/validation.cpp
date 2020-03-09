@@ -1231,16 +1231,26 @@ bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex
     return ReadRawBlockFromDisk(block, block_pos, message_start);
 }
 
-CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
+CAmount GetBlockSubsidy(const int nHeight, const uint256 prevHash, const Consensus::Params& consensusParams)
 {
-    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
-    // Force block reward to zero when right shift is undefined.
-    if (halvings >= 64)
-        return 0;
+    CAmount nSubsidy = 29531 * COIN;
+    std::string cseed_str = prevHash.ToString().substr(7,7);
+    const char* cseed = cseed_str.c_str();
+    long seed = hex2long(cseed);
 
-    CAmount nSubsidy = 50 * COIN;
-    // Subsidy is cut in half every 210,000 blocks which will occur approximately every 4 years.
-    nSubsidy >>= halvings;
+    if (nHeight <= 100000)                        { nSubsidy = (1 + generateMTRandom(seed, 1999999)) * COIN; }
+    else if(nHeight > 193076 && nHeight < 203158) { nSubsidy = 2519841 * COIN; }
+    else if(nHeight <= 203518)                    { nSubsidy = (1 + generateMTRandom(seed, 999999)) * COIN;  }
+    else if(nHeight <= 250000)                    { nSubsidy = (1 + generateMTRandom(seed, 599999)) * COIN;  }
+    else if(nHeight <= 300000)                    { nSubsidy = (1 + generateMTRandom(seed, 349999)) * COIN;  }
+    else if(nHeight <= 350000)                    { nSubsidy = (1 + generateMTRandom(seed, 174999)) * COIN;  }
+    else if(nHeight <= 375000)                    { nSubsidy = (1 + generateMTRandom(seed, 99999)) * COIN;   }
+    else if(nHeight <= 384400)                    { nSubsidy = (1 + generateMTRandom(seed, 49999)) * COIN;   }
+    if (nHeight % 29531 == 0)                     { nSubsidy = nSubsidy * 2; }
+    if (nHeight > 1099999)                        { nSubsidy = floor(19697202017 / (floor(nHeight / 100000) * 100000)) * COIN; }
+    if (nHeight > 1249999)                        { nSubsidy = floor(floor(0.29531 * 19697202017) / (floor(nHeight / 100000) * 100000)) * COIN; }
+    if (nHeight > 2147483647)                     { nSubsidy = 0; }
+
     return nSubsidy;
 }
 
@@ -1990,8 +2000,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     // Now that the whole chain is irreversibly beyond that time it is applied to all blocks except the
     // two in the chain that violate it. This prevents exploiting the issue against nodes during their
     // initial block download.
-    bool fEnforceBIP30 = !((pindex->nHeight==91842 && pindex->GetBlockHash() == uint256S("0x00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec")) ||
-                           (pindex->nHeight==91880 && pindex->GetBlockHash() == uint256S("0x00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")));
+    bool fEnforceBIP30 = false;
 
     // Once BIP34 activated it was not possible to create new duplicate coinbases and thus other than starting
     // with the 2 existing duplicate coinbase pairs, not possible to create overwriting txs.  But by the
@@ -2171,7 +2180,11 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
 
-    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
+    uint256 prevHash;
+    if(pindex->pprev)
+        prevHash = pindex->pprev->GetBlockHash();
+
+    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, prevHash, chainparams.GetConsensus());
     if (block.vtx[0]->GetValueOut() > blockReward)
         return state.Invalid(ValidationInvalidReason::CONSENSUS,
                          error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",

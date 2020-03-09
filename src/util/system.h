@@ -34,6 +34,8 @@
 #include <vector>
 
 #include <boost/thread/condition_variable.hpp> // for boost::thread_interrupted
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_int.hpp>
 
 // Application startup time (used for uptime calculation)
 int64_t GetStartupTime();
@@ -371,6 +373,10 @@ std::string CopyrightHolders(const std::string& strPrefix);
  * sched_setschedule().
  */
 int ScheduleBatchPriority();
+
+long hex2long(const char* hexString);
+
+int generateMTRandom(unsigned int s, int range);
 
 namespace util {
 
