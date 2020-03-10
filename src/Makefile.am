@@ -104,6 +104,7 @@ BITCOIN_CORE_H = \
   addrman.h \
   attributes.h \
   banman.h \
+  banned.h \
   base58.h \
   bech32.h \
   bloom.h \
@@ -261,6 +262,7 @@ libbitcoin_server_a_SOURCES = \
   addrdb.cpp \
   addrman.cpp \
   banman.cpp \
+  banned.cpp \
   blockencodings.cpp \
   blockfilter.cpp \
   chain.cpp \

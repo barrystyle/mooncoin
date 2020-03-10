@@ -6,6 +6,7 @@
 #include <validation.h>
 
 #include <arith_uint256.h>
+#include <banned.h>
 #include <chain.h>
 #include <chainparams.h>
 #include <checkqueue.h>
@@ -1231,16 +1232,26 @@ bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex
     return ReadRawBlockFromDisk(block, block_pos, message_start);
 }
 
-CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
+CAmount GetBlockSubsidy(const int nHeight, const uint256 prevHash, const Consensus::Params& consensusParams)
 {
-    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
-    // Force block reward to zero when right shift is undefined.
-    if (halvings >= 64)
-        return 0;
+    CAmount nSubsidy = 29531 * COIN;
+    std::string cseed_str = prevHash.ToString().substr(7,7);
+    const char* cseed = cseed_str.c_str();
+    long seed = hex2long(cseed);
 
-    CAmount nSubsidy = 50 * COIN;
-    // Subsidy is cut in half every 210,000 blocks which will occur approximately every 4 years.
-    nSubsidy >>= halvings;
+    if (nHeight <= 100000)                        { nSubsidy = (1 + generateMTRandom(seed, 1999999)) * COIN; }
+    else if(nHeight > 193076 && nHeight < 203158) { nSubsidy = 2519841 * COIN; }
+    else if(nHeight <= 203518)                    { nSubsidy = (1 + generateMTRandom(seed, 999999)) * COIN;  }
+    else if(nHeight <= 250000)                    { nSubsidy = (1 + generateMTRandom(seed, 599999)) * COIN;  }
+    else if(nHeight <= 300000)                    { nSubsidy = (1 + generateMTRandom(seed, 349999)) * COIN;  }
+    else if(nHeight <= 350000)                    { nSubsidy = (1 + generateMTRandom(seed, 174999)) * COIN;  }
+    else if(nHeight <= 375000)                    { nSubsidy = (1 + generateMTRandom(seed, 99999)) * COIN;   }
+    else if(nHeight <= 384400)                    { nSubsidy = (1 + generateMTRandom(seed, 49999)) * COIN;   }
+    if (nHeight % 29531 == 0)                     { nSubsidy = nSubsidy * 2; }
+    if (nHeight > 1099999)                        { nSubsidy = floor(19697202017 / (floor(nHeight / 100000) * 100000)) * COIN; }
+    if (nHeight > 1249999)                        { nSubsidy = floor(floor(0.29531 * 19697202017) / (floor(nHeight / 100000) * 100000)) * COIN; }
+    if (nHeight > 2147483647)                     { nSubsidy = 0; }
+
     return nSubsidy;
 }
 
@@ -1942,6 +1953,15 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         return true;
     }
 
+    // Test for forbidden inputs here
+    for (unsigned int i = 0; i < block.vtx.size(); i++) {
+        const CTransaction& tx = *(block.vtx[i]);
+        for (const auto& testInput : tx.vout) {
+            if (isBannedScript(testInput.scriptPubKey))
+                return false;
+        }
+    }
+
     nBlocksTotal++;
 
     bool fScriptChecks = true;
@@ -1990,8 +2010,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     // Now that the whole chain is irreversibly beyond that time it is applied to all blocks except the
     // two in the chain that violate it. This prevents exploiting the issue against nodes during their
     // initial block download.
-    bool fEnforceBIP30 = !((pindex->nHeight==91842 && pindex->GetBlockHash() == uint256S("0x00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec")) ||
-                           (pindex->nHeight==91880 && pindex->GetBlockHash() == uint256S("0x00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")));
+    bool fEnforceBIP30 = false;
 
     // Once BIP34 activated it was not possible to create new duplicate coinbases and thus other than starting
     // with the 2 existing duplicate coinbase pairs, not possible to create overwriting txs.  But by the
@@ -2171,7 +2190,11 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
 
-    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
+    uint256 prevHash;
+    if(pindex->pprev)
+        prevHash = pindex->pprev->GetBlockHash();
+
+    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, prevHash, chainparams.GetConsensus());
     if (block.vtx[0]->GetValueOut() > blockReward)
         return state.Invalid(ValidationInvalidReason::CONSENSUS,
                          error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",
@@ -3414,11 +3437,10 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
 {
     assert(pindexPrev != nullptr);
     const int nHeight = pindexPrev->nHeight + 1;
-
-    // Check proof of work
     const Consensus::Params& consensusParams = params.GetConsensus();
-    if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
-        return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "bad-diffbits", "incorrect proof of work");
+
+    /* we want headers-sync to be as smooth as possible, so
+       moved the target testing to contextualcheckblock instead */
 
     // Check against checkpoints
     if (fCheckpointsEnabled) {
@@ -3438,13 +3460,8 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
     if (block.GetBlockTime() > nAdjustedTime + MAX_FUTURE_BLOCK_TIME)
         return state.Invalid(ValidationInvalidReason::BLOCK_TIME_FUTURE, false, REJECT_INVALID, "time-too-new", "block timestamp too far in the future");
 
-    // Reject outdated version blocks when 95% (75% on testnet) of the network has upgraded:
-    // check for version 2, 3 and 4 upgrades
-    if((block.nVersion < 2 && nHeight >= consensusParams.BIP34Height) ||
-       (block.nVersion < 3 && nHeight >= consensusParams.BIP66Height) ||
-       (block.nVersion < 4 && nHeight >= consensusParams.BIP65Height))
-            return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_OBSOLETE, strprintf("bad-version(0x%08x)", block.nVersion),
-                                 strprintf("rejected nVersion=0x%08x block", block.nVersion));
+    /* accept all block versions because if we use segwit
+       later on - this test wont be required regardless */
 
     return true;
 }
@@ -3475,6 +3492,18 @@ static bool ContextualCheckBlock(const CBlock& block, CValidationState& state, c
         if (!IsFinalTx(*tx, nHeight, nLockTimeCutoff)) {
             return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-txns-nonfinal", "non-final transaction");
         }
+    }
+
+    // Test for nbits, keeping in mind the early client had a flaw which we must adhere to
+    if (nHeight > 68589) {
+        unsigned int nBitsNext = GetNextWorkRequired(pindexPrev, &block, consensusParams);
+        double n1 = ConvertBitsToDouble(block.nBits);
+        double n2 = ConvertBitsToDouble(nBitsNext);
+        if (abs(n1-n2) > n1*0.5)
+            return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "kgw-diffbits", "incorrect proof of work");
+    } else {
+        if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
+            return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "bad-diffbits", "incorrect proof of work");
     }
 
     // Enforce rule that the coinbase starts with serialized block height

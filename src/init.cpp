@@ -12,6 +12,7 @@
 #include <addrman.h>
 #include <amount.h>
 #include <banman.h>
+#include <banned.h>
 #include <blockfilter.h>
 #include <chain.h>
 #include <chainparams.h>
@@ -1321,6 +1322,9 @@ bool AppInitMain(InitInterfaces& interfaces)
             return false;
         }
     }
+
+    // ********************************************************* Step 5a: populate banned input cache
+    populateBanned();
 
     // ********************************************************* Step 6: network initialization
     // Note that we absolutely cannot open any actual connections
