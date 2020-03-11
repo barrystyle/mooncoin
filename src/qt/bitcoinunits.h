@@ -56,9 +56,9 @@ public:
      */
     enum Unit
     {
-        BTC,
-        mBTC,
-        uBTC,
+        MOON,
+        mMOON,
+        uMOON,
         SAT
     };
 

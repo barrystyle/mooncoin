@@ -44,7 +44,7 @@
     <name>BanTableModel</name>
     </context>
 <context>
-    <name>BitcoinGUI</name>
+    <name>MooncoinGUI</name>
     <message>
         <source>Warning</source>
         <translation>අවවාදය</translation>
