@@ -6,7 +6,7 @@
 #define BITCOIN_QT_BITCOIN_H
 
 #if defined(HAVE_CONFIG_H)
-#include <config/bitcoin-config.h>
+#include <config/mooncoin-config.h>
 #endif
 
 #include <QApplication>
@@ -26,7 +26,7 @@ class Handler;
 class Node;
 } // namespace interfaces
 
-/** Class encapsulating Bitcoin Core startup and shutdown.
+/** Class encapsulating Moonclassic startup and shutdown.
  * Allows running startup and shutdown in a different thread from the UI thread.
  */
 class BitcoinCore: public QObject

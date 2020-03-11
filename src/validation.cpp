@@ -3437,7 +3437,6 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
 {
     assert(pindexPrev != nullptr);
     const int nHeight = pindexPrev->nHeight + 1;
-    const Consensus::Params& consensusParams = params.GetConsensus();
 
     /* we want headers-sync to be as smooth as possible, so
        moved the target testing to contextualcheckblock instead */
