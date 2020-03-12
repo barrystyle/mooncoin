@@ -3494,7 +3494,7 @@ static bool ContextualCheckBlock(const CBlock& block, CValidationState& state, c
     }
 
     // Test for nbits, keeping in mind the early client had a flaw which we must adhere to
-    if (nHeight > 68589) {
+    if (nHeight > 67500) {
         unsigned int nBitsNext = GetNextWorkRequired(pindexPrev, &block, consensusParams);
         double n1 = ConvertBitsToDouble(block.nBits);
         double n2 = ConvertBitsToDouble(nBitsNext);
